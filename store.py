@@ -50,7 +50,7 @@ class Store:
             "lcsc",
             "stock",
             "exclude_from_bom",
-            "exclude_from_pos",
+            "exclude_from_pos"
         ]
         if self.order_by == order_by[n] and self.order_dir == "ASC":
             self.order_dir = "DESC"
@@ -70,7 +70,8 @@ class Store:
                     "lcsc TEXT,"
                     "stock NUMERIC,"
                     "exclude_from_bom NUMERIC DEFAULT 0,"
-                    "exclude_from_pos NUMERIC DEFAULT 0"
+                    "exclude_from_pos NUMERIC DEFAULT 0,"
+                    "layer NUMERIC"
                     ")",
                 )
             cur.commit()
@@ -87,47 +88,49 @@ class Store:
                     ).fetchall()
                 ]
 
-    def read_bom_parts(self):
+    def read_bom_parts(self, layer):
         """Read all parts that should be included in the BOM."""
         with contextlib.closing(sqlite3.connect(self.dbfile)) as con:
             with con as cur:
                 # Query all parts that are suposed to be in the BOM an have an lcsc number, group the references together
-                subquery = "SELECT value, reference, footprint, lcsc FROM part_info WHERE exclude_from_bom = '0' AND lcsc != '' ORDER BY lcsc, reference"
+                subquery = "SELECT value, reference, footprint, lcsc FROM part_info WHERE exclude_from_bom = '0' AND lcsc != '' AND layer = ? ORDER BY lcsc, reference"
                 query = f"SELECT value, GROUP_CONCAT(reference) AS refs, footprint, lcsc  FROM ({subquery}) GROUP BY lcsc"
-                a = [list(part) for part in cur.execute(query).fetchall()]
+
+                a = [list(part) for part in cur.execute(query, [layer]).fetchall()]
+
                 # Query all parts that are suposed to be in the BOM but have no lcsc number
-                query = f"SELECT value, reference, footprint, lcsc FROM part_info WHERE exclude_from_bom = '0' AND lcsc = ''"
-                b = [list(part) for part in cur.execute(query).fetchall()]
+                query = f"SELECT value, reference, footprint, lcsc FROM part_info WHERE exclude_from_bom = '0' AND lcsc = '' and layer = ?"
+                b = [list(part) for part in cur.execute(query, [layer]).fetchall()]
                 return a + b
 
-    def read_pos_parts(self):
+    def read_pos_parts(self, layer):
         """Read all parts that should be included in the POS."""
         with contextlib.closing(sqlite3.connect(self.dbfile)) as con:
             con.create_collation("naturalsort", natural_sort_collation)
             with con as cur:
                 # Query all parts that are suposed to be in the POS
-                query = f"SELECT reference, value, footprint FROM part_info WHERE exclude_from_pos = '0' ORDER BY reference COLLATE naturalsort ASC"
-                return [list(part) for part in cur.execute(query).fetchall()]
+                query = f"SELECT reference, value, footprint FROM part_info WHERE exclude_from_pos = '0' and layer = ? ORDER BY reference COLLATE naturalsort ASC"
+                return [list(part) for part in cur.execute(query, [layer]).fetchall()]
 
     def create_part(self, part):
         """Create a part in the database."""
         with contextlib.closing(sqlite3.connect(self.dbfile)) as con:
             with con as cur:
-                cur.execute("INSERT INTO part_info VALUES (?,?,?,?,'',?,?)", part)
+                cur.execute("INSERT INTO part_info VALUES (?,?,?,?,'',?,?,?)", part)
                 cur.commit()
 
     def update_part(self, part):
         """Update a part in the database, overwrite lcsc if supplied."""
         with contextlib.closing(sqlite3.connect(self.dbfile)) as con:
             with con as cur:
-                if len(part) == 6:
+                if len(part) == 7:
                     cur.execute(
-                        "UPDATE part_info set value = ?, footprint = ?, lcsc = ?, exclude_from_bom = ?, exclude_from_pos = ? WHERE reference = ?",
+                        "UPDATE part_info set value = ?, footprint = ?, lcsc = ?, exclude_from_bom = ?, exclude_from_pos = ?, layer = ? WHERE reference = ?",
                         part[1:] + part[0:1],
                     )
                 else:
                     cur.execute(
-                        "UPDATE part_info set value = ?, footprint = ?, exclude_from_bom = ?, exclude_from_pos = ? WHERE reference = ?",
+                        "UPDATE part_info set value = ?, footprint = ?, exclude_from_bom = ?, exclude_from_pos = ?, layer = ? WHERE reference = ?",
                         part[1:] + part[0:1],
                     )
 
@@ -195,6 +198,7 @@ class Store:
                 get_lcsc_value(fp),
                 get_exclude_from_bom(fp),
                 get_exclude_from_pos(fp),
+                fp.GetLayer()
             ]
             dbpart = self.get_part(part[0])
             # if part is not in the database yet, create it

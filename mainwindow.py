@@ -220,6 +220,13 @@ class JLCBCBTools(wx.Dialog):
             align=wx.ALIGN_CENTER,
             flags=wx.dataview.DATAVIEW_COL_RESIZABLE,
         )
+        self.layer = self.footprint_list.AppendTextColumn(
+            "Layer",
+            mode=wx.dataview.DATAVIEW_CELL_INERT,
+            width=80,
+            align=wx.ALIGN_CENTER,
+            flags=wx.dataview.DATAVIEW_COL_RESIZABLE,
+        )
         dummy = self.footprint_list.AppendTextColumn(
             "",
             mode=wx.dataview.DATAVIEW_CELL_INERT,
@@ -469,7 +476,12 @@ class JLCBCBTools(wx.Dialog):
             # decide which icon to use
             part[5] = icons.get(part[5], icons.get(0))
             part[6] = icons.get(part[6], icons.get(0))
-            part.insert(7, "")
+
+            #fp = get_footprint_by_ref(GetBoard(), part[0])
+            #part.insert(7, "Top" if fp.GetLayer() == 0 else "Bottom")
+            part[7] = "Top" if part[7] == 0 else "Bottom"
+
+            part.insert(8, "")
             self.footprint_list.AppendItem(part)
 
     def OnSortFootprintList(self, e):

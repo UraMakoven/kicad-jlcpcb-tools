@@ -208,17 +208,18 @@ class Fabrication:
                     zipfile.write(filePath, os.path.basename(filePath))
         self.logger.info(f"Finished generating ZIP file")
 
-    def generate_pos(self):
-        """Generate placement file (POS)."""
-        posname = f"POS-{self.filename.split('.')[0]}.csv"
+    def save_pos_layer(self, layer):
+        postfix = "top" if layer == 0 else "bottom"
+        posname = f"POS-{self.filename.split('.')[0]}_{postfix}.csv"
         self.corrections = self.parent.library.get_all_correction_data()
         with open(os.path.join(self.assemblydir, posname), "w", newline="") as csvfile:
             writer = csv.writer(csvfile, delimiter=",")
             writer.writerow(
                 ["Designator", "Val", "Package", "Mid X", "Mid Y", "Rotation", "Layer"]
             )
-            for part in self.parent.store.read_pos_parts():
+            for part in self.parent.store.read_pos_parts(layer):
                 fp = get_footprint_by_ref(self.board, part[0])
+
                 writer.writerow(
                     [
                         part[0],
@@ -227,19 +228,35 @@ class Fabrication:
                         ToMM(fp.GetPosition().x),
                         ToMM(fp.GetPosition().y) * -1,
                         self.fix_rotation(fp),
-                        "top" if fp.GetLayer() == 0 else "bottom",
+                        postfix
                     ]
                 )
+
+    def generate_pos(self):
+        """Generate placement file (POS)."""
+
+        #top
+        self.save_pos_layer(F_Cu)
+        self.save_pos_layer(B_Cu)
+
         self.logger.info(f"Finished generating POS file")
 
-    def generate_bom(self):
-        """Generate BOM file."""
-        bomname = f"BOM-{self.filename.split('.')[0]}.csv"
+    def save_bom_layer(self, layer):
+        postfix = "top" if layer == 0 else "bottom"
+        bomname = f"BOM-{self.filename.split('.')[0]}_{postfix}.csv"
         with open(
             os.path.join(self.assemblydir, bomname), "w", newline="", encoding="utf-8"
         ) as csvfile:
             writer = csv.writer(csvfile, delimiter=",")
             writer.writerow(["Comment", "Designator", "Footprint", "LCSC"])
-            for part in self.parent.store.read_bom_parts():
+            for part in self.parent.store.read_bom_parts(layer):
                 writer.writerow(part)
+
+
+    def generate_bom(self):
+        """Generate BOM file."""
+
+        self.save_bom_layer(F_Cu)
+        self.save_bom_layer(B_Cu)
+
         self.logger.info(f"Finished generating BOM file")
